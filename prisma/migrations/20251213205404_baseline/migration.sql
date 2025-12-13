@@ -1,7 +1,4 @@
 -- CreateEnum
-CREATE TYPE "UserRole" AS ENUM ('VIEWER', 'ACCOUNTANT', 'ADMIN');
-
--- CreateEnum
 CREATE TYPE "CustomerType" AS ENUM ('EXPORT', 'IMPORT', 'TRANSIT', 'FREE');
 
 -- CreateEnum
@@ -36,12 +33,27 @@ CREATE TABLE "users" (
     "id" TEXT NOT NULL,
     "username" TEXT NOT NULL,
     "password_hash" TEXT NOT NULL,
-    "role" "UserRole" NOT NULL DEFAULT 'VIEWER',
+    "full_name" TEXT,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "is_admin" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "user_permissions" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "screen" TEXT NOT NULL,
+    "can_view" BOOLEAN NOT NULL DEFAULT true,
+    "can_create" BOOLEAN NOT NULL DEFAULT false,
+    "can_edit" BOOLEAN NOT NULL DEFAULT false,
+    "can_delete" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "user_permissions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -92,6 +104,9 @@ CREATE TABLE "invoice_items" (
     "id" TEXT NOT NULL,
     "invoice_id" TEXT NOT NULL,
     "description" TEXT NOT NULL,
+    "unit_price" DECIMAL(18,6) NOT NULL DEFAULT 0,
+    "quantity" DECIMAL(18,6) NOT NULL DEFAULT 1,
+    "vat_rate" DECIMAL(5,2) NOT NULL DEFAULT 0,
     "amount" DECIMAL(18,6) NOT NULL,
     "has_vat" BOOLEAN NOT NULL DEFAULT false,
     "sort_order" INTEGER NOT NULL DEFAULT 0,
@@ -146,6 +161,7 @@ CREATE TABLE "additional_fees" (
     "vessel_id" TEXT,
     "date" TIMESTAMP(3) NOT NULL,
     "fee_type" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL DEFAULT 1,
     "amount" DECIMAL(18,6) NOT NULL,
     "policy_no" TEXT,
     "details" TEXT,
@@ -215,6 +231,7 @@ CREATE TABLE "vouchers" (
     "party_name" TEXT,
     "method" "PaymentMethod" NOT NULL,
     "bank_account_id" TEXT,
+    "reference_number" TEXT,
     "amount" DECIMAL(18,6) NOT NULL,
     "note" TEXT,
     "date" TIMESTAMP(3) NOT NULL,
@@ -237,13 +254,35 @@ CREATE TABLE "expense_categories" (
 );
 
 -- CreateTable
+CREATE TABLE "invoice_item_templates" (
+    "id" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "vat_rate" DECIMAL(5,2) DEFAULT 0,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "invoice_item_templates_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "income_statement_settings" (
+    "id" TEXT NOT NULL DEFAULT 'single_row',
+    "revenue_item_template_ids" TEXT[],
+    "expense_category_ids" TEXT[],
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "income_statement_settings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "employees" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "department" TEXT,
+    "start_date" TIMESTAMP(3),
     "base_salary" DECIMAL(18,6) NOT NULL,
     "allowances" DECIMAL(18,6) NOT NULL DEFAULT 0,
-    "fixed_deductions" DECIMAL(18,6) NOT NULL DEFAULT 0,
     "status" "EmployeeStatus" NOT NULL DEFAULT 'ACTIVE',
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "deleted_at" TIMESTAMP(3),
@@ -360,6 +399,9 @@ CREATE TABLE "print_settings" (
 CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "user_permissions_user_id_screen_key" ON "user_permissions"("user_id", "screen");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "customers_name_key" ON "customers"("name");
 
 -- CreateIndex
@@ -387,10 +429,16 @@ CREATE UNIQUE INDEX "vouchers_code_key" ON "vouchers"("code");
 CREATE UNIQUE INDEX "expense_categories_name_key" ON "expense_categories"("name");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "invoice_item_templates_description_key" ON "invoice_item_templates"("description");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "payroll_runs_month_key" ON "payroll_runs"("month");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "payroll_items_run_id_employee_id_key" ON "payroll_items"("run_id", "employee_id");
+
+-- AddForeignKey
+ALTER TABLE "user_permissions" ADD CONSTRAINT "user_permissions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "invoices" ADD CONSTRAINT "invoices_customer_id_fkey" FOREIGN KEY ("customer_id") REFERENCES "customers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -415,6 +463,9 @@ ALTER TABLE "additional_fees" ADD CONSTRAINT "additional_fees_vessel_id_fkey" FO
 
 -- AddForeignKey
 ALTER TABLE "bank_accounts" ADD CONSTRAINT "bank_accounts_bank_id_fkey" FOREIGN KEY ("bank_id") REFERENCES "banks"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "treasury_transactions" ADD CONSTRAINT "treasury_transactions_voucher_id_fkey" FOREIGN KEY ("voucher_id") REFERENCES "vouchers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "vouchers" ADD CONSTRAINT "vouchers_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
